@@ -1,0 +1,38 @@
+# Guard + пример защищённого приложения.
+#
+#   cp -r config.example config     # отредактируйте config/*.yml
+#   docker compose up -d --build
+#   docker compose logs -f guard
+#
+services:
+  guard:
+    build: .
+    image: guard:latest
+    container_name: guard
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - guard-data:/data
+      - ./config:/config:ro
+      # - ./certs:/certs:ro            # только для tls.mode: custom
+    environment:
+      TZ: UTC
+      # GUARD_SMTP_PASSWORD: ${GUARD_SMTP_PASSWORD}
+    mem_limit: 256m
+    networks: [apps]
+
+  # Пример приложения в режиме proxy (config/applications/whoami.yml):
+  # показывает заголовки запроса, включая X-Guard-*.
+  whoami:
+    image: traefik/whoami:latest
+    restart: unless-stopped
+    networks: [apps]
+    # Портов наружу нет: приложение доступно только через Guard.
+
+volumes:
+  guard-data:
+
+networks:
+  apps:

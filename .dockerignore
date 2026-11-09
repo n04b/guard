@@ -1,0 +1,7 @@
+.git
+config
+certs
+examples
+docs
+*.md
+!config.example

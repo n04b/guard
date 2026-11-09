@@ -1,0 +1,30 @@
+#!/command/with-contenv bash
+# Runs once per container start, as root, before Rauthy and Caddy.
+set -euo pipefail
+
+mkdir -p /run/guard /data
+chown guard:guard /run/guard /data
+chmod 0700 /data
+
+# Volumes created or restored as root (e.g. "docker run --rm ... restore")
+# are handed back to the service user.
+find /data -xdev \! -user guard -exec chown -h guard:guard {} + 2>/dev/null || true
+
+conf="${GUARD_CONFIG_DIR:-/config}"
+if [ ! -f "$conf/server.yml" ]; then
+  echo "[init] $conf/server.yml not found: mount your configuration directory to $conf" >&2
+  echo "[init] example: docker run -v ./config:/config:ro ... (see config.example/ in the repository)" >&2
+  exit 1
+fi
+if ! /command/s6-setuidgid guard test -r "$conf/server.yml"; then
+  echo "[init] $conf/server.yml is not readable by uid $(id -u guard): make the config files world-readable (chmod 644)" >&2
+  exit 1
+fi
+for f in /certs/fullchain.pem /certs/privkey.pem; do
+  if [ -e "$f" ] && ! /command/s6-setuidgid guard test -r "$f"; then
+    echo "[init] $f is not readable by uid $(id -u guard) (Caddy runs as that user): chown 10001 or chmod 640 with a shared group" >&2
+    exit 1
+  fi
+done
+
+exec /command/s6-setuidgid guard /usr/local/bin/guard-sync init

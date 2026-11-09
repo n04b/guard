@@ -1,0 +1,26 @@
+# Режим app: приложение само выполняет вход по OIDC (Authorization Code +
+# PKCE) и проверяет токены. Переименуйте в spa.yml, чтобы включить.
+application:
+  name: spa
+  domain: spa.example.com
+
+  upstream:
+    host: spa
+    port: 3000
+
+  auth:
+    mode: app
+    client_type: public       # public — SPA/мобильные; confidential — сервер
+    redirect_uris:
+      - https://spa.example.com/callback
+    post_logout_redirect_uris:
+      - https://spa.example.com/
+    # allowed_origins:        # для public по умолчанию = https://spa.example.com
+    #   - https://spa.example.com
+    # backchannel_logout_uri: https://spa.example.com/oidc/backchannel-logout
+    scopes: [openid, profile, email, groups]
+    signing_alg: RS256        # RS256 | RS384 | RS512 | EdDSA
+    access_token_seconds: 1800
+    # Секрет confidential-клиента: /data/secrets/clients/<name>.secret
+
+  on_remove: disable

@@ -1,0 +1,7 @@
+# Локальная демонстрация: *.localhost указывает на 127.0.0.1 в Chrome,
+# Firefox и Edge. Сертификаты выпускает локальный CA Guard.
+server:
+  hostname: auth.localhost
+admin:
+  bootstrap_email: admin@example.com
+  allow_from: [0.0.0.0/0, ::/0]     # только для демо!

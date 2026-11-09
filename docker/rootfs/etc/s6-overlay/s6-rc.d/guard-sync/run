@@ -1,0 +1,4 @@
+#!/command/with-contenv bash
+set -euo pipefail
+date +%s > /run/guard/guard-sync.started
+exec /command/s6-setuidgid guard /usr/local/bin/guard-sync run

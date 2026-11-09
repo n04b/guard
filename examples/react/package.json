@@ -1,0 +1,19 @@
+{
+  "name": "guard-react-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "oidc-client-ts": "^3.3.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-oidc-context": "^3.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
+    "vite": "^7.0.0"
+  }
+}

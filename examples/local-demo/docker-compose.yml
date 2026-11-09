@@ -1,0 +1,27 @@
+# Локальная проверка Guard на одной машине.
+#
+#   docker compose up -d --build
+#   docker compose exec guard cat /data/secrets/bootstrap-admin.txt
+#   откройте https://auth.localhost/auth/v1/account (admin@example.com)
+#   затем https://whoami.localhost — после входа видны заголовки X-Guard-*
+#
+# Браузер предупредит о сертификате, пока не установлен корневой CA:
+#   curl -o guard-root-ca.crt http://auth.localhost/.guard/ca.crt
+# Passkeys работают только после установки этого сертификата.
+services:
+  guard:
+    build: ../..
+    image: guard:latest
+    ports: ["80:80", "443:443"]
+    volumes:
+      - guard-demo:/data
+      - ./config:/config:ro
+    mem_limit: 256m
+    networks: [apps]
+  whoami:
+    image: traefik/whoami:latest
+    networks: [apps]
+volumes:
+  guard-demo:
+networks:
+  apps:

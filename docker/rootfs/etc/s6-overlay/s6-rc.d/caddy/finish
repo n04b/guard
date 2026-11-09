@@ -1,0 +1,2 @@
+#!/bin/bash
+exec /etc/s6-overlay/scripts/crash-limit caddy "$@"

@@ -1,0 +1,36 @@
+#!/bin/bash
+# Called from a service's finish script: crash-limit SERVICE EXIT_CODE SIGNAL
+#
+# s6 restarts a crashed service right away. If it crashes 5 times in a row,
+# each time within a minute of starting, the container is stopped so that
+# Docker's restart policy and monitoring can take over.
+svc="$1" code="${2:-0}" sig="${3:-0}"
+dir=/run/guard
+max=5
+
+# Stopped by the supervisor (docker stop / s6 shutdown): not a crash.
+if [ "$code" = 256 ] && { [ "$sig" = 15 ] || [ "$sig" = 2 ]; }; then
+  exit 0
+fi
+
+now=$(date +%s)
+started=$(cat "$dir/$svc.started" 2>/dev/null || echo 0)
+count=$(cat "$dir/$svc.crashes" 2>/dev/null || echo 0)
+if [ $((now - started)) -gt 60 ]; then
+  count=0
+fi
+count=$((count + 1))
+echo "$count" > "$dir/$svc.crashes"
+
+if [ "$code" = 256 ]; then
+  echo "[$svc] exited on signal $sig (crash $count/$max)" >&2
+else
+  echo "[$svc] exited with code $code (crash $count/$max)" >&2
+fi
+
+if [ "$count" -ge "$max" ]; then
+  echo "[$svc] keeps crashing right after start, stopping the container" >&2
+  echo 1 > /run/s6-linux-init-container-results/exitcode
+  /run/s6/basedir/bin/halt
+fi
+exit 0

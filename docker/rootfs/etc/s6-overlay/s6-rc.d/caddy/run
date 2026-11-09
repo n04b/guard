@@ -1,0 +1,10 @@
+#!/bin/bash
+# Caddy starts with the last Caddyfile it accepted; guard-sync loads newer
+# ones through the admin API (localhost:2019).
+set -euo pipefail
+date +%s > /run/guard/caddy.started
+export XDG_DATA_HOME=/data XDG_CONFIG_HOME=/data/guard/caddy-config HOME=/data/guard
+export TZ="${TZ:-UTC}"
+exec > >(exec sed -u 's/^/[caddy] /') 2>&1
+exec /command/s6-setuidgid guard /usr/local/bin/caddy run \
+  --config /data/guard/Caddyfile --adapter caddyfile

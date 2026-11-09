@@ -1,0 +1,23 @@
+#!/bin/bash
+# Rauthy gets a clean environment: everything it needs is in config.toml,
+# plus one-off variables from startup.env (first-start admin password,
+# database restore).
+set -euo pipefail
+date +%s > /run/guard/rauthy.started
+
+env_file=/data/guard/rauthy/startup.env
+if [ -f "$env_file" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$env_file"
+  set +a
+fi
+export TZ="${TZ:-UTC}"
+# jemalloc tuning from the upstream Rauthy image
+export MALLOC_CONF="abort_conf:true,narenas:8,tcache_max:4096,dirty_decay_ms:5000,muzzy_decay_ms:5000"
+
+cd /data/guard/rauthy
+exec > >(exec sed -u 's/^/[rauthy] /') 2>&1
+exec /command/s6-setuidgid guard /usr/local/bin/rauthy serve \
+  --config-file /data/guard/rauthy/config.toml \
+  --secrets-file /data/guard/rauthy/secrets.toml

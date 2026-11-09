@@ -1,0 +1,22 @@
+# Режим proxy: Guard сам закрывает приложение. Неавторизованный пользователь
+# уходит на страницу входа, upstream получает заголовки X-Guard-User,
+# X-Guard-Email, X-Guard-Groups, X-Guard-Roles и т.д. (не-ASCII значения
+# percent-encoded в UTF-8). Upstream должен принимать трафик только от Guard.
+application:
+  name: whoami
+  domain: whoami.example.com
+
+  upstream:
+    host: whoami              # имя контейнера в общей сети Docker
+    port: 80
+    # scheme: http            # http | https
+    # tls_insecure_skip_verify: false
+
+  auth:
+    mode: proxy
+    # client_id: whoami       # по умолчанию = name
+    # restrict_group_prefix: team   # пускать только пользователей с группой team*
+    # require_passkey: false        # требовать Passkey для этого приложения
+
+  # Что делать с OIDC-клиентом при удалении файла: disable | delete
+  on_remove: disable

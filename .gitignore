@@ -1,0 +1,4 @@
+/config/
+/certs/
+/bin/
+*.tar.gz
