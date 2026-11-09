@@ -27,7 +27,7 @@
 
 ## Изменение конфигурации
 
-Отредактируйте файлы в `config/`. Через 2 секунды в логе появится `configuration files changed, applying`. Проверить результат:
+Отредактируйте `config/guard.yml`. Через 2 секунды в логе появится `configuration files changed, applying`. Проверить результат:
 
 ```bash
 docker exec guard guard-sync check
@@ -35,7 +35,7 @@ docker logs --since 1m guard | grep '\[sync\]'
 curl -s https://auth.example.com/health        # с адреса из admin.allow_from — подробно
 ```
 
-Удаление файла приложения сразу убирает маршрут, а OIDC-клиент отключается (`on_remove: disable`) или удаляется (`on_remove: delete`). Если вернуть файл, клиент снова включится.
+Удаление приложения из списка `applications` сразу убирает маршрут, а OIDC-клиент отключается (`on_remove: disable`) или удаляется (`on_remove: delete`). Если вернуть приложение в список, клиент снова включится.
 
 **Смена домена сервера авторизации или `webauthn.rp_id`** делает все Passkeys недействительными. `guard-sync` откажется применять такое изменение, пока контейнер не запущен с `GUARD_ALLOW_RP_ID_CHANGE=i-understand-passkeys-will-break`.
 

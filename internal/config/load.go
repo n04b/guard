@@ -6,102 +6,76 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/goccy/go-yaml"
 )
 
-// File names inside the configuration directory.
-const (
-	ServerFileName   = "server.yml"
-	TLSFileName      = "tls.yml"
-	SecurityFileName = "security.yml"
-	AppsDirName      = "applications"
-)
+// FileName is the configuration file inside the configuration directory.
+// The directory (not the file) is mounted into the container, so editors
+// that replace the file on save keep working.
+const FileName = "guard.yml"
 
-// Load reads, defaults and validates the configuration in dir.
-//
-// server.yml is required. tls.yml, security.yml and the applications
-// directory are optional and fall back to defaults.
+// legacyFiles are the files of the old multi-file layout.
+var legacyFiles = []string{"server.yml", "tls.yml", "security.yml", "applications"}
+
+// fileSchema is the layout of guard.yml.
+type fileSchema struct {
+	ServerFile   `yaml:",inline"`
+	TLS          TLS           `yaml:"tls"`
+	Security     SecurityFile  `yaml:"security"`
+	Applications []Application `yaml:"applications"`
+}
+
+// Path returns the configuration file path inside dir.
+func Path(dir string) string { return filepath.Join(dir, FileName) }
+
+// Load reads, defaults and validates <dir>/guard.yml.
 func Load(dir string) (*Config, error) {
-	cfg := &Config{Dir: dir}
-
-	if err := readYAML(filepath.Join(dir, ServerFileName), true, &cfg.Server); err != nil {
-		return nil, err
+	path := Path(dir)
+	b, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		for _, l := range legacyFiles {
+			if _, err := os.Stat(filepath.Join(dir, l)); err == nil {
+				return nil, fmt.Errorf("%s not found, but %s exists: the configuration now lives in one file. "+
+					"Merge server.yml (top level), tls.yml (tls:), security.yml (security:) and applications/*.yml "+
+					"(list under applications:) into %s, see config.example/guard.yml", path, l, FileName)
+			}
+		}
+		return nil, fmt.Errorf("%s not found (see config.example/guard.yml)", path)
 	}
-	if err := readYAML(filepath.Join(dir, TLSFileName), false, &cfg.TLS); err != nil {
-		return nil, err
-	}
-	if err := readYAML(filepath.Join(dir, SecurityFileName), false, &cfg.Security); err != nil {
-		return nil, err
-	}
-
-	apps, err := loadApps(filepath.Join(dir, AppsDirName))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
-	cfg.Applications = apps
+	return Parse(b, dir)
+}
 
+// Parse decodes and validates the content of guard.yml. dir is only
+// recorded in the result.
+func Parse(b []byte, dir string) (*Config, error) {
+	if len(bytes.TrimSpace(b)) == 0 {
+		return nil, fmt.Errorf("%s is empty", FileName)
+	}
+	var f fileSchema
+	if err := yaml.UnmarshalWithOptions(b, &f, yaml.DisallowUnknownField()); err != nil {
+		return nil, fmt.Errorf("%s: %s", FileName, yaml.FormatError(err, false, true))
+	}
+	cfg := &Config{
+		Dir:          dir,
+		Server:       f.ServerFile,
+		TLS:          TLSFile{TLS: f.TLS},
+		Security:     f.Security,
+		Applications: f.Applications,
+	}
+	for i := range cfg.Applications {
+		cfg.Applications[i].File = fmt.Sprintf("applications[%d]", i)
+	}
 	cfg.applyDefaults()
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 	return cfg, nil
-}
-
-func loadApps(dir string) ([]Application, error) {
-	entries, err := os.ReadDir(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", dir, err)
-	}
-	var names []string
-	for _, e := range entries {
-		n := e.Name()
-		if e.IsDir() || strings.HasPrefix(n, ".") {
-			continue
-		}
-		if strings.HasSuffix(n, ".yml") || strings.HasSuffix(n, ".yaml") {
-			names = append(names, n)
-		}
-	}
-	sort.Strings(names)
-
-	apps := make([]Application, 0, len(names))
-	for _, n := range names {
-		var f AppFile
-		path := filepath.Join(dir, n)
-		if err := readYAML(path, true, &f); err != nil {
-			return nil, err
-		}
-		f.Application.File = filepath.Join(AppsDirName, n)
-		apps = append(apps, f.Application)
-	}
-	return apps, nil
-}
-
-func readYAML(path string, required bool, v any) error {
-	b, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) && !required {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read %s: %w", path, err)
-	}
-	if len(bytes.TrimSpace(b)) == 0 {
-		if required {
-			return fmt.Errorf("%s is empty", path)
-		}
-		return nil
-	}
-	if err := yaml.UnmarshalWithOptions(b, v, yaml.DisallowUnknownField()); err != nil {
-		return fmt.Errorf("%s: %s", filepath.Base(path), yaml.FormatError(err, false, true))
-	}
-	return nil
 }
 
 func (c *Config) applyDefaults() {

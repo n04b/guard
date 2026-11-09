@@ -1,5 +1,0 @@
-application:
-  name: whoami
-  domain: whoami.localhost
-  upstream: {host: whoami, port: 80}
-  auth: {mode: proxy}

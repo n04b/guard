@@ -32,9 +32,9 @@ var version = "dev"
 const usage = `guard-sync — configuration manager of the Guard auth server
 
 Usage:
-  guard-sync run                      keep Rauthy and Caddy in sync with /config (service)
+  guard-sync run                      keep Rauthy and Caddy in sync with /config/guard.yml (service)
   guard-sync init                     prepare secrets and configs before the services start
-  guard-sync check [--caddyfile]      validate /config and print a summary (or the Caddyfile)
+  guard-sync check [--caddyfile]      validate /config/guard.yml and print a summary (or the Caddyfile)
   guard-sync healthcheck              exit 0 if Guard is up (Docker HEALTHCHECK)
   guard-sync backup [--keep N] [--output FILE]
                                       archive the database, secrets, certificates and config
@@ -46,7 +46,8 @@ Usage:
   guard-sync user set-password EMAIL  issue a new one-time password
   guard-sync version
 
-Environment: GUARD_CONFIG_DIR (default /config), GUARD_DATA_DIR (default /data).
+Environment: GUARD_CONFIG_DIR (directory with guard.yml, default /config),
+             GUARD_DATA_DIR (default /data).
 `
 
 func main() {
@@ -144,7 +145,7 @@ func cmdCheck(p app.Paths, args []string) error {
 		fmt.Print(caddy.Render(caddy.Input{Cfg: cfg, Mode: mode, CADir: p.CADir(), HealthAddr: app.HealthAddr}))
 		return nil
 	}
-	fmt.Printf("configuration OK (%s)\n\n", p.ConfigDir)
+	fmt.Printf("configuration OK (%s)\n\n", config.Path(p.ConfigDir))
 	fmt.Printf("auth server   %s\n", cfg.PublicURL())
 	fmt.Printf("issuer        %s/auth/v1/\n", cfg.PublicURL())
 	fmt.Printf("webauthn      rp_id=%s\n", cfg.Server.WebAuthn.RPID)

@@ -89,7 +89,7 @@ func TestClientWireFormat(t *testing.T) {
 }
 
 func TestRenderConfig(t *testing.T) {
-	cfg := loadCfg(t, nil)
+	cfg := loadCfg(t)
 	out, err := RenderConfig(RenderInput{
 		Cfg: cfg, DataDir: "/data/rauthy", BootstrapDir: "/run/b", EncKey: "g1/AAAA",
 		RaftSecret: `r"aft\`, APISecret: "api",

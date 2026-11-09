@@ -4,19 +4,19 @@ SPA — это *public client*: секрета нет, вход идёт чер�
 
 ## 1. Описать приложение в Guard
 
-`config/applications/spa.yml`:
+Добавьте элемент в `applications` в `config/guard.yml`:
 
 ```yaml
-application:
-  name: spa
-  domain: spa.example.com
-  upstream: {host: spa, port: 80}      # контейнер со статикой (nginx, caddy, serve)
-  auth:
-    mode: app
-    client_type: public
-    redirect_uris: [https://spa.example.com/callback]
-    post_logout_redirect_uris: [https://spa.example.com/]
-    scopes: [openid, profile, email, groups]
+applications:
+  - name: spa
+    domain: spa.example.com
+    upstream: {host: spa, port: 80}    # контейнер со статикой (nginx, caddy, serve)
+    auth:
+      mode: app
+      client_type: public
+      redirect_uris: [https://spa.example.com/callback]
+      post_logout_redirect_uris: [https://spa.example.com/]
+      scopes: [openid, profile, email, groups]
 ```
 
 `guard-sync` создаст в Rauthy клиента `spa` со следующими настройками:
@@ -47,7 +47,7 @@ npm run build             # dist/ отдаётся upstream-контейнеро
 ```
 
 - `authority` — это issuer Guard. `oidc-client-ts` сам прочитает discovery и JWKS.
-- `redirect_uri` и `post_logout_redirect_uri` должны **точно** совпадать с YAML.
+- `redirect_uri` и `post_logout_redirect_uri` должны **точно** совпадать с `guard.yml`.
 - Маршрут `/callback` должен отдавать `index.html`. Для SPA с history-роутингом настройте fallback в веб-сервере.
 
 ## 3. Вызов API
@@ -68,7 +68,7 @@ API **обязано** проверить подпись, `iss`, `aud` и `exp` 
 
 | Симптом | Причина |
 |---|---|
-| `invalid redirect_uri` на странице входа | URI в коде и в YAML различаются (схема, порт, завершающий слэш) |
+| `invalid redirect_uri` на странице входа | URI в коде и в `guard.yml` различаются (схема, порт, завершающий слэш) |
 | CORS-ошибка на `/token` | origin SPA не совпадает с `allowed_origins` (по умолчанию `https://<domain>`) |
 | Бесконечный редирект после входа | не задан `onSigninCallback`, параметры `code`/`state` остаются в адресе |
 | Passkey не предлагается | сертификат не доверенный (local-ca без установленного корня) или открыт не через HTTPS |

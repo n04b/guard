@@ -1,6 +1,6 @@
 # Guard + пример защищённого приложения.
 #
-#   cp -r config.example config     # отредактируйте config/*.yml
+#   cp -r config.example config     # отредактируйте config/guard.yml
 #   docker compose up -d --build
 #   docker compose logs -f guard
 #
@@ -23,7 +23,7 @@ services:
     mem_limit: 256m
     networks: [apps]
 
-  # Пример приложения в режиме proxy (config/applications/whoami.yml):
+  # Пример приложения в режиме proxy (whoami в config/guard.yml):
   # показывает заголовки запроса, включая X-Guard-*.
   whoami:
     image: traefik/whoami:latest

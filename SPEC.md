@@ -3,7 +3,7 @@
 
 **Версия:** 2.1
 **Статус:** Реализовано (первая версия), см. README.md и docs/testing.md
-**Изменения в 2.1 (по итогам реализации):** режим `proxy` реализован встроенным forward-auth Rauthy без oauth2-proxy; Caddy получает конфигурацию в виде Caddyfile через admin API; порты в `server.yml` — публичные (внутри контейнера всегда 80/443); глобальное отключение пароля заменено обязательным Passkey для отдельных приложений и админов; регистрация — `closed` / `open` (приглашения заменены командой `guard-sync user add`); уточнены поля YAML (раздел 8); добавлены команды `guard-sync` и известные ограничения.
+**Изменения в 2.1 (по итогам реализации):** режим `proxy` реализован встроенным forward-auth Rauthy без oauth2-proxy; Caddy получает конфигурацию в виде Caddyfile через admin API; порты `server.http_port`/`server.https_port` — публичные (внутри контейнера всегда 80/443); глобальное отключение пароля заменено обязательным Passkey для отдельных приложений и админов; регистрация — `closed` / `open` (приглашения заменены командой `guard-sync user add`); уточнены поля YAML (раздел 8); добавлены команды `guard-sync` и известные ограничения. Вся конфигурация — один файл `guard.yml` (раздел 8).
 **Изменения в 2.0 относительно 1.0:** Keycloak + H2 заменены на Rauthy (SQLite); NGINX + OpenSSL + ACME-клиент заменены на Caddy; убраны отдельные Node.js/Express и React; добавлен супервизор s6-overlay; явно разделены режимы авторизации; self-signed заменён локальным CA; зафиксирован RP ID; критерии приёмки сделаны измеримыми. Восстановление доступа вынесено из первой версии (см. `TODO.md`).
 
 ---
@@ -153,7 +153,7 @@ PID 1 контейнера. Обязанности:
 
 Биометрию проверяет устройство пользователя. Система не получает и не хранит биометрические данные.
 
-**RP ID.** WebAuthn Relying Party ID задаётся в `server.yml` (`webauthn.rp_id`) и после первой регистрации Passkey считается неизменяемым. Если его сменить, все зарегистрированные Passkeys станут недействительны. `guard-sync` отказывается применять изменение `rp_id` без флага `--i-understand-passkeys-will-break`.
+**RP ID.** WebAuthn Relying Party ID задаётся в `guard.yml` (`webauthn.rp_id`) и после первой регистрации Passkey считается неизменяемым. Если его сменить, все зарегистрированные Passkeys станут недействительны. `guard-sync` отказывается применять изменение `rp_id` без переменной `GUARD_ALLOW_RP_ID_CHANGE=i-understand-passkeys-will-break`.
 
 По умолчанию `rp_id` совпадает с хостом сервера авторизации (`auth.example.com`).
 
@@ -170,7 +170,7 @@ PID 1 контейнера. Обязанности:
 
 ### 4.3. Регистрация пользователей
 
-Режим задаётся в `security.yml`:
+Режим задаётся в `security.registration.mode`:
 
 - `closed` — пользователей создаёт администратор (по умолчанию): `guard-sync user add <email>` печатает одноразовый пароль, либо Admin UI;
 - `open` — открытая регистрация, опционально с ограничением по домену e-mail. Требует SMTP: Rauthy отправляет ссылку для установки пароля.
@@ -183,7 +183,7 @@ PID 1 контейнера. Обязанности:
 
 ### 4.5. Первый администратор
 
-При первом запуске с пустой БД создаётся администратор с e-mail из `server.yml` (`admin.bootstrap_email`) и случайным одноразовым паролем. Пароль записывается в `/data/secrets/bootstrap-admin.txt` с правами `0600` и не выводится в логи. Для доступа к Admin UI администратор обязан зарегистрировать Passkey (`admin.require_passkey`, по умолчанию `true`); файл удаляется `guard-sync` после первого успешного входа.
+При первом запуске с пустой БД создаётся администратор с e-mail из `admin.bootstrap_email` и случайным одноразовым паролем. Пароль записывается в `/data/secrets/bootstrap-admin.txt` с правами `0600` и не выводится в логи. Для доступа к Admin UI администратор обязан зарегистрировать Passkey (`admin.require_passkey`, по умолчанию `true`); файл удаляется `guard-sync` после первого успешного входа.
 
 ## 5. База данных
 
@@ -263,19 +263,14 @@ Wildcard-сертификаты (DNS-01) в первую версию не вх�
 
 ## 8. Конфигурация
 
-Основной способ управления — файлы. Admin UI Rauthy нужен только для работы с пользователями.
+Основной способ управления — один файл `guard.yml`. Admin UI Rauthy нужен только для работы с пользователями.
 
 Структура:
 
 ```text
 guard/
 ├── config/
-│   ├── server.yml
-│   ├── tls.yml
-│   ├── security.yml
-│   └── applications/
-│       ├── app1.yml
-│       └── app2.yml
+│   └── guard.yml        # монтируется каталог: -v ./config:/config:ro
 ├── certs/               # только для tls.mode: custom
 │   ├── fullchain.pem
 │   └── privkey.pem
@@ -293,9 +288,9 @@ Volume `/data`:
 └── secrets/             # ключи, API-ключ, секреты клиентов, bootstrap-пароль (0600)
 ```
 
-Полные шаблоны с комментариями: `config.example/` в репозитории. Кратко:
+Полный шаблон с комментариями: `config.example/guard.yml`. Кратко, по секциям одного файла:
 
-`server.yml`:
+Сервер (верхний уровень):
 
 ```yaml
 server:
@@ -324,7 +319,7 @@ logging:
   level: info
 ```
 
-`tls.yml`:
+Секция `tls`:
 
 ```yaml
 tls:
@@ -339,77 +334,78 @@ tls:
     fallback_after: 10m
 ```
 
-`security.yml`:
+Секция `security`:
 
 ```yaml
-registration:
-  mode: closed                 # closed | open (open требует SMTP)
-  # allowed_email_domain: example.com
-
-password_policy:
-  min_length: 12
-  max_length: 128
-  require_lowercase: 0
-  require_uppercase: 0
-  require_digits: 0
-  require_special: 0
-  not_recently_used: 0
-  valid_days: 0
-
-session:
-  idle_minutes: 60
-  max_hours: 720
-
-hashing:                       # Argon2id; пик памяти ≈ memory_mib × max_parallel_hashes
-  memory_mib: 32
-  iterations: 3
-  parallelism: 2
-  max_parallel_hashes: 2
-
-roles: [editor]
-groups: [family, team]
+security:
+  registration:
+    mode: closed               # closed | open (open требует SMTP)
+    # allowed_email_domain: example.com
+  password_policy:
+    min_length: 12
+    max_length: 128
+    require_lowercase: 0
+    require_uppercase: 0
+    require_digits: 0
+    require_special: 0
+    not_recently_used: 0
+    valid_days: 0
+  session:
+    idle_minutes: 60
+    max_hours: 720
+  hashing:                     # Argon2id; пик памяти ≈ memory_mib × max_parallel_hashes
+    memory_mib: 32
+    iterations: 3
+    parallelism: 2
+    max_parallel_hashes: 2
+  roles: [editor]
+  groups: [family, team]
 ```
 
 Защита от перебора паролей встроена в Rauthy (растущие задержки, блокировка IP) и отдельными параметрами не настраивается.
 
-`applications/app1.yml`:
+Секция `applications` — список:
 
 ```yaml
-application:
-  name: app1
-  domain: app1.example.com
+applications:
+  - name: app1
+    domain: app1.example.com
+    upstream:
+      host: app1
+      port: 3000
+      scheme: http             # http | https
+      # tls_insecure_skip_verify: false
+    auth:
+      mode: proxy              # proxy | app | none
+      client_id: app1          # по умолчанию = name
+      # client_type: public | confidential — для mode app (по умолчанию public)
+      # redirect_uris, allowed_origins — только для mode app
+      post_logout_redirect_uris: [https://app1.example.com/]
+      # backchannel_logout_uri: https://app1.example.com/oidc/backchannel
+      scopes: [openid, profile, email, groups]
+      restrict_group_prefix: team  # пускать только пользователей с группой team*
+      require_passkey: false
+      signing_alg: RS256       # RS256 | RS384 | RS512 | EdDSA
+      access_token_seconds: 1800
+    on_remove: disable         # disable | delete — что делать с клиентом при удалении из списка
 
-  upstream:
-    host: app1
-    port: 3000
-    scheme: http               # http | https
-    # tls_insecure_skip_verify: false
-
-  auth:
-    mode: proxy                # proxy | app | none
-    client_id: app1            # по умолчанию = name
-    # client_type: public | confidential — для mode app (по умолчанию public)
-    # redirect_uris, allowed_origins — только для mode app
-    post_logout_redirect_uris: [https://app1.example.com/]
-    # backchannel_logout_uri: https://app1.example.com/oidc/backchannel
-    scopes: [openid, profile, email, groups]
-    restrict_group_prefix: team    # пускать только пользователей с группой team*
-    require_passkey: false
-    signing_alg: RS256         # RS256 | RS384 | RS512 | EdDSA
-    access_token_seconds: 1800
-
-  on_remove: disable           # disable | delete — что делать с клиентом при удалении файла
+  - name: app2
+    domain: app2.example.com
+    upstream: {host: app2, port: 8080}
+    auth: {mode: none}
 ```
+
+Невалидный файл не применяется целиком: продолжает работать предыдущая конфигурация. Сообщения об ошибках указывают строку (синтаксис) или элемент `applications[N] (name)` (проверки).
 
 Секрет confidential-клиента генерирует `guard-sync` при создании клиента и записывает в `/data/secrets/clients/<name>.secret` (`0600`). Секреты в YAML не хранятся.
 
-При удалении файла приложения маршрут удаляется сразу, а OIDC-клиент отключается (`disable`) или удаляется (`delete`).
+При удалении приложения из списка маршрут удаляется сразу, а OIDC-клиент отключается (`disable`) или удаляется (`delete`).
 
 ## 9. Подключение веб-приложений
 
 Для каждого приложения задаются: название, домен, upstream, режим авторизации, `client_id`, тип клиента, redirect URI, ограничение по группе.
 
-Процедура подключения: добавить файл в `config/applications/` → `guard-sync` применит его автоматически (или `docker kill -s HUP guard`). Проверка: `docker exec guard guard-sync check`.
+Процедура подключения: добавить элемент в список `applications` → `guard-sync` применит его автоматически (или `docker kill -s HUP guard`). Проверка: `docker exec guard guard-sync check`.
 
 Документация и примеры:
 
@@ -503,7 +499,7 @@ application:
 - Rauthy не рекомендует discoverable credentials: при входе по Passkey пользователь сначала вводит e-mail (после первого входа он подставляется автоматически).
 - Глобально отключить вход по паролю нельзя; вместо этого — `require_passkey` для приложений и админов и аккаунты «только Passkey».
 - Внеплановый бэкап БД через API требует сессии администратора, поэтому `guard-sync backup` берёт последний бэкап по расписанию (свежий можно создать в Admin UI → Config → Backups).
-- Удаление роли/группы из `security.yml` не удаляет её в Rauthy.
+- Удаление роли/группы из `security.roles`/`security.groups` не удаляет её в Rauthy.
 - Файлы `custom`-сертификата должны читаться пользователем uid 10001.
 - Rauthy — проект меньше и моложе Keycloak; SAML, LDAP-федерация и сложные политики доступа не поддерживаются.
 - Single-node: при отказе диска данные восстанавливаются только из бэкапа.

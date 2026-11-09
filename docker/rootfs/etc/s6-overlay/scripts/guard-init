@@ -11,13 +11,16 @@ chmod 0700 /data
 find /data -xdev \! -user guard -exec chown -h guard:guard {} + 2>/dev/null || true
 
 conf="${GUARD_CONFIG_DIR:-/config}"
-if [ ! -f "$conf/server.yml" ]; then
-  echo "[init] $conf/server.yml not found: mount your configuration directory to $conf" >&2
-  echo "[init] example: docker run -v ./config:/config:ro ... (see config.example/ in the repository)" >&2
+if [ ! -f "$conf/guard.yml" ]; then
+  echo "[init] $conf/guard.yml not found: mount the directory that contains guard.yml to $conf" >&2
+  echo "[init] example: docker run -v ./config:/config:ro ... (template: config.example/guard.yml)" >&2
+  if [ -e "$conf/server.yml" ]; then
+    echo "[init] server.yml found: the configuration now lives in one file, merge it into guard.yml" >&2
+  fi
   exit 1
 fi
-if ! /command/s6-setuidgid guard test -r "$conf/server.yml"; then
-  echo "[init] $conf/server.yml is not readable by uid $(id -u guard): make the config files world-readable (chmod 644)" >&2
+if ! /command/s6-setuidgid guard test -r "$conf/guard.yml"; then
+  echo "[init] $conf/guard.yml is not readable by uid $(id -u guard): make it world-readable (chmod 644)" >&2
   exit 1
 fi
 for f in /certs/fullchain.pem /certs/privkey.pem; do

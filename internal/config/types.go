@@ -1,6 +1,6 @@
-// Package config loads and validates Guard's YAML configuration.
+// Package config loads and validates Guard's configuration file guard.yml.
 //
-// The YAML files are Guard's own interface. They are translated into a
+// guard.yml is Guard's own interface. It is translated into a
 // Rauthy config, Rauthy API calls and a Caddyfile by other packages.
 package config
 
@@ -17,7 +17,7 @@ type Config struct {
 	Dir string
 }
 
-// ---------- server.yml ----------
+// ---------- top level of guard.yml: server, webauthn, admin, smtp, backup, logging ----------
 
 type ServerFile struct {
 	Server   Server   `yaml:"server"`
@@ -79,7 +79,7 @@ type Logging struct {
 	Level string `yaml:"level"`
 }
 
-// ---------- tls.yml ----------
+// ---------- tls: ----------
 
 type TLSFile struct {
 	TLS TLS `yaml:"tls"`
@@ -116,7 +116,7 @@ type ACME struct {
 	FallbackAfter Duration `yaml:"fallback_after"`
 }
 
-// ---------- security.yml ----------
+// ---------- security: ----------
 
 type SecurityFile struct {
 	Registration   Registration   `yaml:"registration"`
@@ -166,11 +166,7 @@ type Hashing struct {
 	MaxParallelHashes int `yaml:"max_parallel_hashes"`
 }
 
-// ---------- applications/*.yml ----------
-
-type AppFile struct {
-	Application Application `yaml:"application"`
-}
+// ---------- applications: (list) ----------
 
 type AuthMode string
 
@@ -201,7 +197,7 @@ type Application struct {
 	Auth     AppAuth  `yaml:"auth"`
 	OnRemove OnRemove `yaml:"on_remove"`
 
-	// File is the file the application was loaded from.
+	// File locates the entry for messages, e.g. "applications[2]".
 	File string `yaml:"-"`
 }
 

@@ -34,7 +34,7 @@ func TestRoundTrip(t *testing.T) {
 	write(t, filepath.Join(s.CaddyData, "pki/authorities/local/root.crt"), "ROOT")
 	write(t, filepath.Join(s.CaddyData, "locks/x.lock"), "lock")
 	write(t, s.StateFile, `{"rp_id":"auth.example.com"}`)
-	write(t, filepath.Join(s.ConfigDir, "server.yml"), "server: {}")
+	write(t, filepath.Join(s.ConfigDir, "guard.yml"), "server: {}")
 
 	out := filepath.Join(src, "backups", ArchiveName(time.Now()))
 	m, err := Create(s, out, "test")
@@ -71,7 +71,7 @@ func TestRoundTrip(t *testing.T) {
 	check(filepath.Join(tg.Secrets, "clients/app.secret"), "cs")
 	check(filepath.Join(tg.CaddyData, "pki/authorities/local/root.crt"), "ROOT")
 	check(tg.StateFile, `{"rp_id":"auth.example.com"}`)
-	check(filepath.Join(tg.ConfigOut, "server.yml"), "server: {}")
+	check(filepath.Join(tg.ConfigOut, "guard.yml"), "server: {}")
 	check(filepath.Join(tg.RestoreDir, "backup_new"), "new-db")
 	check(tg.RestorePending, "file:"+filepath.Join(tg.RestoreDir, "backup_new")+"\n")
 	if _, err := os.Stat(filepath.Join(tg.CaddyData, "locks/x.lock")); err == nil {

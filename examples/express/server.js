@@ -6,7 +6,7 @@
 //
 // Переменные окружения:
 //   GUARD_ISSUER         https://auth.example.com/auth/v1/
-//   OIDC_CLIENT_ID       client_id из applications/<name>.yml
+//   OIDC_CLIENT_ID       client_id приложения из guard.yml (по умолчанию = name)
 //   OIDC_CLIENT_SECRET   содержимое /data/secrets/clients/<name>.secret
 //   APP_URL              https://app.example.com (публичный адрес приложения)
 //   API_AUDIENCE         client_id, чьи access token принимает API (по умолчанию OIDC_CLIENT_ID)

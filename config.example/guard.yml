@@ -1,0 +1,174 @@
+# Конфигурация Guard — один файл.
+#
+# Монтируйте каталог, а не сам файл: docker run -v ./config:/config:ro …
+# (редакторы сохраняют файл через замену, и смонтированный по отдельности
+# файл перестаёт обновляться внутри контейнера).
+#
+# Изменения применяются без перезапуска. Невалидный файл не применяется:
+# работает предыдущая конфигурация, ошибка видна в логе и в /health.
+# Проверка: docker exec guard guard-sync check
+
+# ─────────────────────────── Сервер авторизации ───────────────────────────
+
+server:
+  # Домен сервера авторизации. Issuer OIDC: https://<hostname>/auth/v1/
+  # Выберите один раз: смена домена меняет issuer у всех приложений.
+  hostname: auth.example.com
+  # Публичные порты (что видит браузер). Внутри контейнера всегда 80/443:
+  # для нестандартного порта -p 8443:443 и https_port: 8443.
+  http_port: 80
+  https_port: 443
+  # CIDR прокси/балансировщиков перед Guard (например, Cloudflare).
+  # Только им разрешено передавать X-Forwarded-For.
+  trusted_proxies: []
+
+webauthn:
+  # Relying Party ID для Passkeys. По умолчанию = server.hostname.
+  # ВНИМАНИЕ: после регистрации первого Passkey не менять — все Passkeys
+  # перестанут работать. guard-sync откажется применять изменение без
+  # GUARD_ALLOW_RP_ID_CHANGE=i-understand-passkeys-will-break.
+  rp_id: auth.example.com
+  # Название, которое браузер показывает при создании Passkey.
+  rp_name: Guard
+
+admin:
+  # E-mail первого администратора. Одноразовый пароль при первом запуске
+  # пишется в /data/secrets/bootstrap-admin.txt (в логи не попадает).
+  bootstrap_email: admin@example.com
+  # Откуда открывается Admin UI Rauthy и подробный /health.
+  allow_from:
+    - 127.0.0.1/32
+    - ::1/128
+    # - 100.64.0.0/10     # Tailscale
+    # - 192.168.0.0/16    # домашняя сеть
+  # Админам обязателен Passkey.
+  require_passkey: true
+
+smtp:
+  # Без SMTP всё работает, кроме писем (восстановление, подтверждение e-mail,
+  # открытая регистрация).
+  enabled: false
+  # host: smtp.example.com
+  # port: 587
+  # username: guard@example.com
+  # password_env: GUARD_SMTP_PASSWORD   # пароль — только из окружения контейнера
+  # from: "Guard <guard@example.com>"
+  # tls_mode: starttls                  # tls | starttls | plain
+
+backup:
+  # Автоматический бэкап БД Rauthy, cron с секундами:
+  # "сек мин час день месяц день_недели год". По умолчанию ежедневно в 02:30.
+  cron: "0 30 2 * * * *"
+  keep_days: 7
+
+logging:
+  level: info                 # error | warn | info | debug
+
+# ─────────────────────────────────── TLS ───────────────────────────────────
+
+tls:
+  # auto     — custom, если есть сертификат в /certs; иначе acme, если задан
+  #            acme.email и все домены публичные; иначе local-ca.
+  # custom   — свой сертификат (один на все домены: SAN или wildcard).
+  # acme     — Let's Encrypt (нужны публичные домены и доступные 80/443).
+  # local-ca — собственный CA Guard. Корневой сертификат скачивается по
+  #            http://<hostname>/.guard/ca.crt и ставится на устройства.
+  mode: auto
+
+  custom:
+    # Файлы должны читаться пользователем uid 10001.
+    certificate: /certs/fullchain.pem
+    private_key: /certs/privkey.pem
+
+  acme:
+    email: ""                 # например admin@example.com
+    # ca: https://acme-staging-v02.api.letsencrypt.org/directory
+    # Если ACME не выдал сертификат за fallback_after — перейти на local-ca.
+    # Без явного разрешения Guard никогда не подменяет сертификат молча.
+    allow_fallback: false
+    fallback_after: 10m
+
+# ─────────────────────────────── Безопасность ──────────────────────────────
+
+security:
+  registration:
+    # closed — пользователей создаёт администратор:
+    #          docker exec guard guard-sync user add user@example.com
+    # open   — самостоятельная регистрация (требует SMTP: пароль задаётся
+    #          по ссылке из письма).
+    mode: closed
+    # allowed_email_domain: example.com   # только для open
+
+  password_policy:
+    min_length: 12
+    max_length: 128
+    require_lowercase: 0      # минимальное количество символов класса
+    require_uppercase: 0
+    require_digits: 0
+    require_special: 0
+    not_recently_used: 0      # запрет повторять N последних паролей
+    valid_days: 0             # срок действия пароля, 0 — бессрочно
+
+  session:
+    idle_minutes: 60          # выход после бездействия
+    max_hours: 720            # максимальная длина сессии
+
+  hashing:
+    # Argon2id. Пиковая память ≈ memory_mib × max_parallel_hashes.
+    memory_mib: 32
+    iterations: 3
+    parallelism: 2
+    max_parallel_hashes: 2
+
+  # Создаются в Rauthy, если их нет. Удаление из списка ничего не удаляет.
+  roles: []
+  groups: []
+
+# ─────────────────────────────── Приложения ────────────────────────────────
+#
+# Каждое приложение — элемент списка. Удаление элемента сразу убирает
+# маршрут, OIDC-клиент отключается или удаляется (on_remove).
+
+applications:
+
+  # Режим proxy: Guard сам закрывает приложение. Неавторизованный
+  # пользователь уходит на страницу входа, upstream получает заголовки
+  # X-Guard-User, X-Guard-Email, X-Guard-Groups, X-Guard-Roles и т.д.
+  # (не-ASCII значения percent-encoded в UTF-8). Upstream должен принимать
+  # трафик только от Guard.
+  - name: whoami
+    domain: whoami.example.com      # публичный домен приложения
+    upstream:
+      host: whoami                  # имя контейнера в общей сети Docker
+      port: 80
+      # scheme: http                # http | https
+      # tls_insecure_skip_verify: false
+    auth:
+      mode: proxy
+      # client_id: whoami           # по умолчанию = name
+      # restrict_group_prefix: team # пускать только пользователей с группой team*
+      # require_passkey: false      # требовать Passkey для этого приложения
+    on_remove: disable              # disable | delete
+
+  # Режим app: приложение само выполняет вход по OIDC (Authorization Code +
+  # PKCE) и проверяет токены.
+  # - name: spa
+  #   domain: spa.example.com
+  #   upstream: {host: spa, port: 3000}
+  #   auth:
+  #     mode: app
+  #     client_type: public         # public — SPA/мобильные; confidential — сервер
+  #     redirect_uris: [https://spa.example.com/callback]
+  #     post_logout_redirect_uris: [https://spa.example.com/]
+  #     # allowed_origins: [https://spa.example.com]   # для public по умолчанию
+  #     # backchannel_logout_uri: https://spa.example.com/oidc/backchannel-logout
+  #     scopes: [openid, profile, email, groups]
+  #     signing_alg: RS256          # RS256 | RS384 | RS512 | EdDSA
+  #     access_token_seconds: 1800
+  #     # Секрет confidential-клиента: /data/secrets/clients/<name>.secret
+
+  # Режим none: только проксирование и TLS, без авторизации.
+  # - name: status
+  #   domain: status.example.com
+  #   upstream: {host: status, port: 8080}
+  #   auth: {mode: none}

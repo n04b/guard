@@ -10,7 +10,7 @@ import (
 // Paths are the directories guard-sync works with. Defaults match the
 // container layout; every one can be overridden by an environment variable.
 type Paths struct {
-	ConfigDir string // GUARD_CONFIG_DIR, read-only YAML (default /config)
+	ConfigDir string // GUARD_CONFIG_DIR, directory with guard.yml (default /config)
 	DataDir   string // GUARD_DATA_DIR, the persistent volume (default /data)
 }
 

@@ -6,18 +6,18 @@
 
 Приложение — *confidential client*: обмен кода на токен идёт на сервере, с секретом и PKCE.
 
-`config/applications/app.yml`:
+Элемент в `applications` в `config/guard.yml`:
 
 ```yaml
-application:
-  name: app
-  domain: app.example.com
-  upstream: {host: app, port: 3000}
-  auth:
-    mode: app
-    client_type: confidential
-    redirect_uris: [https://app.example.com/callback]
-    post_logout_redirect_uris: [https://app.example.com/]
+applications:
+  - name: app
+    domain: app.example.com
+    upstream: {host: app, port: 3000}
+    auth:
+      mode: app
+      client_type: confidential
+      redirect_uris: [https://app.example.com/callback]
+      post_logout_redirect_uris: [https://app.example.com/]
 ```
 
 После синхронизации секрет клиента появится в `/data/secrets/clients/app.secret`:

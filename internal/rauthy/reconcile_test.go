@@ -105,20 +105,24 @@ func (f *fakeAPI) mutations() []string {
 	return out
 }
 
-func loadCfg(t *testing.T, apps map[string]string) *config.Config {
+// loadCfg builds guard.yml from a base plus application list items.
+func loadCfg(t *testing.T, apps ...string) *config.Config {
 	t.Helper()
 	dir := t.TempDir()
-	write := func(name, content string) {
-		p := filepath.Join(dir, name)
-		os.MkdirAll(filepath.Dir(p), 0o755)
-		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
+	content := `
+server: {hostname: auth.example.com}
+admin: {bootstrap_email: a@example.com}
+security:
+  roles: [editor]
+  groups: [team]
+  password_policy: {min_length: 14, require_digits: 1}
+applications:
+` + strings.Join(apps, "")
+	if len(apps) == 0 {
+		content += "  []\n"
 	}
-	write("server.yml", "server: {hostname: auth.example.com}\nadmin: {bootstrap_email: a@example.com}\n")
-	write("security.yml", "roles: [editor]\ngroups: [team]\npassword_policy: {min_length: 14, require_digits: 1}\n")
-	for n, c := range apps {
-		write("applications/"+n, c)
+	if err := os.WriteFile(filepath.Join(dir, config.FileName), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	cfg, err := config.Load(dir)
 	if err != nil {
@@ -128,23 +132,21 @@ func loadCfg(t *testing.T, apps map[string]string) *config.Config {
 }
 
 const proxyApp = `
-application:
-  name: wiki
-  domain: wiki.example.com
-  upstream: {host: wiki, port: 3000}
-  auth: {mode: proxy, restrict_group_prefix: team}
+  - name: wiki
+    domain: wiki.example.com
+    upstream: {host: wiki, port: 3000}
+    auth: {mode: proxy, restrict_group_prefix: team}
 `
 
 const spaApp = `
-application:
-  name: spa
-  domain: spa.example.com
-  upstream: {host: spa, port: 80}
-  on_remove: delete
-  auth:
-    mode: app
-    client_type: confidential
-    redirect_uris: [https://spa.example.com/callback]
+  - name: spa
+    domain: spa.example.com
+    upstream: {host: spa, port: 80}
+    on_remove: delete
+    auth:
+      mode: app
+      client_type: confidential
+      redirect_uris: [https://spa.example.com/callback]
 `
 
 func newReconciler(t *testing.T, api API) (*Reconciler, *secrets.Store) {
@@ -157,7 +159,7 @@ func TestReconcileLifecycle(t *testing.T) {
 	r, store := newReconciler(t, api)
 	st := &state.State{ManagedClients: map[string]state.ManagedClient{}}
 
-	cfg := loadCfg(t, map[string]string{"wiki.yml": proxyApp, "spa.yml": spaApp})
+	cfg := loadCfg(t, proxyApp, spaApp)
 	res := r.Reconcile(context.Background(), cfg, st)
 	if err := res.Err(); err != nil {
 		t.Fatal(err)
@@ -211,7 +213,7 @@ func TestReconcileLifecycle(t *testing.T) {
 	}
 
 	// Removing apps: wiki is disabled (default), spa deleted (on_remove: delete).
-	cfg = loadCfg(t, nil)
+	cfg = loadCfg(t)
 	res = r.Reconcile(context.Background(), cfg, st)
 	if err := res.Err(); err != nil {
 		t.Fatal(err)
@@ -230,7 +232,7 @@ func TestReconcileLifecycle(t *testing.T) {
 	}
 
 	// Re-adding wiki enables it again.
-	cfg = loadCfg(t, map[string]string{"wiki.yml": proxyApp})
+	cfg = loadCfg(t, proxyApp)
 	r.Reconcile(context.Background(), cfg, st)
 	if !api.clients["wiki"].Enabled || st.ManagedClients["wiki"].Disabled {
 		t.Error("wiki should be enabled again")
@@ -242,7 +244,7 @@ func TestUnmanagedClientIsNotTouched(t *testing.T) {
 	api.clients["wiki"] = &ClientResponse{ID: "wiki", Enabled: true}
 	r, _ := newReconciler(t, api)
 	st := &state.State{ManagedClients: map[string]state.ManagedClient{}}
-	res := r.Reconcile(context.Background(), loadCfg(t, map[string]string{"wiki.yml": proxyApp}), st)
+	res := r.Reconcile(context.Background(), loadCfg(t, proxyApp), st)
 	if res.Err() == nil || !strings.Contains(res.Err().Error(), "not created by Guard") {
 		t.Fatalf("expected conflict error, got %v", res.Err())
 	}

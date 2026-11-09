@@ -26,24 +26,42 @@ func setup(t *testing.T) Paths {
 	t.Helper()
 	root := t.TempDir()
 	p := Paths{ConfigDir: filepath.Join(root, "config"), DataDir: filepath.Join(root, "data")}
-	writeCfg(t, p, "server.yml", `
-server: {hostname: auth.example.com}
-admin: {bootstrap_email: admin@example.com}
-`)
-	writeCfg(t, p, "applications/wiki.yml", `
-application:
-  name: wiki
-  domain: wiki.example.com
-  upstream: {host: wiki, port: 3000}
-`)
+	writeGuard(t, p, baseCfg, wikiApp)
 	return p
 }
 
-func writeCfg(t *testing.T, p Paths, name, content string) {
+const baseCfg = `
+server: {hostname: auth.example.com}
+admin: {bootstrap_email: admin@example.com}
+applications:
+`
+
+const wikiApp = `
+  - name: wiki
+    domain: wiki.example.com
+    upstream: {host: wiki, port: 3000}
+`
+
+const blogApp = `
+  - name: blog
+    domain: blog.example.com
+    upstream: {host: blog, port: 2368}
+`
+
+const badApp = `
+  - name: Broken!
+`
+
+// writeGuard writes guard.yml from a base and application items. Like an
+// editor, it replaces the file instead of writing in place.
+func writeGuard(t *testing.T, p Paths, base string, apps ...string) {
 	t.Helper()
-	path := filepath.Join(p.ConfigDir, name)
-	os.MkdirAll(filepath.Dir(path), 0o755)
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	os.MkdirAll(p.ConfigDir, 0o755)
+	tmp := filepath.Join(p.ConfigDir, ".guard.yml.tmp")
+	if err := os.WriteFile(tmp, []byte(base+strings.Join(apps, "")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, filepath.Join(p.ConfigDir, "guard.yml")); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -132,7 +150,7 @@ func TestInitInvalidConfigFallsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := read(t, p.Caddyfile())
-	writeCfg(t, p, "applications/bad.yml", "application: {name: BAD}")
+	writeGuard(t, p, baseCfg, wikiApp, badApp)
 	if err := Init(p, quietLog()); err != nil {
 		t.Fatalf("invalid config with a previous working one must not fail: %v", err)
 	}
@@ -142,7 +160,7 @@ func TestInitInvalidConfigFallsBack(t *testing.T) {
 
 	// Without a previous configuration the start fails.
 	p2 := setup(t)
-	writeCfg(t, p2, "applications/bad.yml", "application: {name: BAD}")
+	writeGuard(t, p2, baseCfg, badApp)
 	if err := Init(p2, quietLog()); err == nil {
 		t.Error("first start with invalid config must fail")
 	}
@@ -154,10 +172,7 @@ func TestInitRefusesRPIDChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	os.Remove(p.Caddyfile()) // no fallback, so the error surfaces
-	writeCfg(t, p, "server.yml", `
-server: {hostname: login.example.com}
-admin: {bootstrap_email: admin@example.com}
-`)
+	writeGuard(t, p, strings.Replace(baseCfg, "auth.example.com", "login.example.com", 1), wikiApp)
 	err := Init(p, quietLog())
 	if err == nil || !strings.Contains(err.Error(), "rp_id changed") {
 		t.Fatalf("expected rp_id error, got %v", err)
@@ -275,12 +290,7 @@ func TestDaemonSync(t *testing.T) {
 	lmu.Unlock()
 
 	// Adding an application reloads Caddy and creates a client.
-	writeCfg(t, p, "applications/blog.yml", `
-application:
-  name: blog
-  domain: blog.example.com
-  upstream: {host: blog, port: 2368}
-`)
+	writeGuard(t, p, baseCfg, wikiApp, blogApp)
 	waitFor(t, "caddy reloaded with blog", func() bool {
 		lmu.Lock()
 		defer lmu.Unlock()
@@ -297,7 +307,7 @@ application:
 	}
 
 	// An invalid file keeps the running configuration and shows up in /health.
-	writeCfg(t, p, "applications/broken.yml", "application: {name: Broken!}")
+	writeGuard(t, p, baseCfg, wikiApp, blogApp, badApp)
 	waitFor(t, "config error reported", func() bool {
 		resp, err := http.Get("http://" + healthAddr + "/health/detail")
 		if err != nil {
@@ -309,7 +319,7 @@ application:
 			ConfigError string `json:"config_error"`
 		}
 		json.NewDecoder(resp.Body).Decode(&r)
-		return r.Status == "degraded" && strings.Contains(r.ConfigError, "broken.yml")
+		return r.Status == "degraded" && strings.Contains(r.ConfigError, "applications[2] (Broken!)")
 	})
 	resp, err := http.Get("http://" + healthAddr + "/health/public")
 	if err != nil {
@@ -317,7 +327,7 @@ application:
 	}
 	b, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if strings.Contains(string(b), "broken") || !strings.Contains(string(b), `"status"`) {
+	if strings.Contains(string(b), "Broken") || !strings.Contains(string(b), `"status"`) {
 		t.Errorf("public health must only expose the status: %s", b)
 	}
 
@@ -325,7 +335,7 @@ application:
 	fr.mu.Lock()
 	fr.login = true
 	fr.mu.Unlock()
-	os.Remove(filepath.Join(p.ConfigDir, "applications/broken.yml"))
+	writeGuard(t, p, baseCfg, wikiApp, blogApp)
 	waitFor(t, "bootstrap password removed", func() bool {
 		return !secrets.New(p.Secrets()).Exists(secrets.BootstrapAdmin)
 	})

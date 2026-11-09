@@ -1,6 +1,6 @@
 # Guard
 
-Лёгкий сервер авторизации для небольших веб-проектов в одном Docker-контейнере. Он даёт единый вход по Passkeys и паролю через OpenID Connect, сам выпускает TLS-сертификаты и проксирует трафик к вашим приложениям. Настраивается YAML-файлами.
+Лёгкий сервер авторизации для небольших веб-проектов в одном Docker-контейнере. Он даёт единый вход по Passkeys и паролю через OpenID Connect, сам выпускает TLS-сертификаты и проксирует трафик к вашим приложениям. Настраивается одним YAML-файлом `guard.yml`.
 
 ```text
             ┌──────────────────────────── контейнер guard ─────────────────────────────┐
@@ -8,7 +8,7 @@
             │        ├─▶ app1.example.com ─ forward_auth (Rauthy) ─▶ upstream app1     │
             │        └─▶ spa.example.com ───────────────────────────▶ upstream spa      │
             │                                                                           │
-            │ guard-sync: /config/*.yml ─▶ Admin API Rauthy (клиенты, роли, политика)    │
+            │ guard-sync: /config/guard.yml ─▶ Admin API Rauthy (клиенты, роли, политика)│
             │                           └▶ Admin API Caddy (маршруты, TLS)               │
             │ s6-overlay: запуск, перезапуск и остановка процессов                       │
             └───────────────────────────────────────────────────────────────────────────┘
@@ -18,7 +18,7 @@
 |---|---|
 | [Rauthy](https://github.com/sebadob/rauthy) 0.37 | OIDC-провайдер: пользователи, пароли, Passkeys, сессии, токены, встроенная БД (Hiqlite/SQLite) |
 | [Caddy](https://caddyserver.com) 2.11 | Reverse proxy, HTTPS (Let's Encrypt или локальный CA), forward-auth |
-| `guard-sync` (Go, этот репозиторий) | Переводит YAML в настройки Rauthy и Caddy, следит за изменениями, health, бэкапы, CLI |
+| `guard-sync` (Go, этот репозиторий) | Переводит `guard.yml` в настройки Rauthy и Caddy, следит за изменениями, health, бэкапы, CLI |
 | [s6-overlay](https://github.com/just-containers/s6-overlay) 3.2 | PID 1: порядок запуска, перезапуск упавших процессов, корректная остановка |
 
 Техническое задание: [SPEC.md](SPEC.md). Что отложено: [TODO.md](TODO.md).
@@ -43,13 +43,13 @@ docker compose exec guard cat /data/secrets/bootstrap-admin.txt
 ```bash
 git clone … guard && cd guard
 cp -r config.example config
-$EDITOR config/server.yml config/tls.yml config/applications/whoami.yml
+$EDITOR config/guard.yml
 docker compose up -d --build
 docker compose exec guard guard-sync check     # проверка конфигурации
 docker compose exec guard cat /data/secrets/bootstrap-admin.txt
 ```
 
-Для Let's Encrypt укажите в `tls.yml` `mode: acme` (или оставьте `auto`) и `acme.email`. Домены должны указывать на сервер, а порты 80 и 443 должны быть открыты.
+Для Let's Encrypt укажите в секции `tls` `mode: acme` (или оставьте `auto`) и `acme.email`. Домены должны указывать на сервер, а порты 80 и 443 должны быть открыты.
 
 Минимальный запуск без compose:
 
@@ -61,16 +61,19 @@ docker run -d --name guard -p 80:80 -p 443:443 \
 
 ## Конфигурация
 
-Вся настройка лежит в `/config`, который обычно монтируется только для чтения. Шаблоны с комментариями находятся в [config.example/](config.example/).
+Вся настройка лежит в одном файле `guard.yml`. Шаблон с комментариями: [config.example/guard.yml](config.example/guard.yml). В контейнер монтируется **каталог** с этим файлом (`./config:/config:ro`), а не сам файл: редакторы сохраняют через замену файла, и смонтированный отдельно файл перестал бы обновляться внутри контейнера.
 
-| Файл | Обязателен | Что задаёт |
+| Секция | Обязательна | Что задаёт |
 |---|---|---|
-| `server.yml` | да | домен сервера, RP ID для Passkeys, первый админ, доступ к Admin UI, SMTP, расписание бэкапов |
-| `tls.yml` | нет | `auto` / `custom` / `acme` / `local-ca` |
-| `security.yml` | нет | регистрация, парольная политика, сессии, Argon2, роли и группы |
-| `applications/*.yml` | нет | приложения: домен, upstream, режим авторизации, OIDC-клиент |
+| `server`, `admin` | да | домен сервера, публичные порты, первый админ, доступ к Admin UI |
+| `webauthn`, `smtp`, `backup`, `logging` | нет | RP ID для Passkeys, почта, расписание бэкапов, уровень логов |
+| `tls` | нет | `auto` / `custom` / `acme` / `local-ca` |
+| `security` | нет | регистрация, парольная политика, сессии, Argon2, роли и группы |
+| `applications` | нет | список приложений: домен, upstream, режим авторизации, OIDC-клиент |
 
-Изменения применяются без перезапуска: `guard-sync` проверяет файлы каждые 2 секунды, можно также отправить сигнал `docker kill -s HUP guard`. Невалидная конфигурация не применяется: остаётся предыдущая рабочая, а ошибка видна в логе и в `/health`.
+Ошибки указывают на место в файле: строку для синтаксиса, `applications[2] (wiki)` для проверок приложения.
+
+Изменения применяются без перезапуска: `guard-sync` проверяет файл каждые 2 секунды, можно также отправить сигнал `docker kill -s HUP guard`. Невалидная конфигурация не применяется: остаётся предыдущая рабочая, а ошибка видна в логе и в `/health`.
 
 Секреты в YAML не хранятся. Ключ шифрования, секреты Hiqlite, API-ключ `guard-sync` и секреты OIDC-клиентов генерируются при первом запуске и лежат в `/data/secrets` с правами `0600`.
 
@@ -83,7 +86,7 @@ docker run --rm -v "$PWD/config:/config:ro" --entrypoint guard-sync guard:latest
 
 ## Подключение приложений
 
-Каждый файл в `config/applications/` описывает одно приложение. Есть три режима:
+Каждый элемент списка `applications` описывает одно приложение. Есть три режима:
 
 | `auth.mode` | Кто проверяет вход | Когда использовать |
 |---|---|---|
@@ -125,7 +128,7 @@ services:
   docker exec guard guard-sync user set-password anna@example.com
   ```
   Команда печатает одноразовый пароль. Пользователь входит в кабинет и добавляет Passkey.
-- **Открытая регистрация** (`security.yml: registration.mode: open`) требует SMTP: пароль задаётся по ссылке из письма.
+- **Открытая регистрация** (`security.registration.mode: open`) требует SMTP: пароль задаётся по ссылке из письма.
 - Остальное (группы пользователей, блокировка, сессии) делается в Admin UI: `https://auth.example.com/auth/v1/admin`. Он открывается только с адресов из `admin.allow_from`.
 
 ## TLS
@@ -141,7 +144,7 @@ services:
 
 В браузере обычный self-signed сертификат не подходит: на сайтах с ошибкой сертификата браузеры отключают WebAuthn. С `local-ca` после установки корневого сертификата ошибок нет.
 
-Порты `http_port` и `https_port` в `server.yml` — это публичные порты, которые видит браузер. Внутри контейнера Caddy всегда слушает 80 и 443, поэтому нестандартный порт пробрасывается так: `-p 8443:443` плюс `https_port: 8443`.
+Порты `server.http_port` и `server.https_port` — это публичные порты, которые видит браузер. Внутри контейнера Caddy всегда слушает 80 и 443, поэтому нестандартный порт пробрасывается так: `-p 8443:443` плюс `https_port: 8443`.
 
 ## Резервное копирование
 
@@ -190,8 +193,8 @@ docker run --rm -v guard-data-new:/data -v "$PWD/guard-backups:/backups:ro" \
 - Rauthy не рекомендует discoverable credentials: при входе по Passkey сначала вводится e-mail (после первого входа он подставляется сам).
 - Single-node: нет кластеризации. При потере диска данные восстанавливаются только из бэкапа.
 - Внеплановый бэкап БД через API требует сессии администратора, поэтому `guard-sync backup` берёт последний бэкап по расписанию. Если нужна свежая копия, сделайте её в Admin UI → Config → Backups, а затем запустите `guard-sync backup`.
-- Удаление роли или группы из `security.yml` ничего не удаляет в Rauthy: на них могут ссылаться пользователи.
-- Клиенты, созданные вручную в Admin UI, `guard-sync` не трогает. Если `client_id` в YAML совпадает с таким клиентом, это ошибка конфигурации.
+- Удаление роли или группы из `security.roles`/`security.groups` ничего не удаляет в Rauthy: на них могут ссылаться пользователи.
+- Клиенты, созданные вручную в Admin UI, `guard-sync` не трогает. Если `client_id` в `guard.yml` совпадает с таким клиентом, это ошибка конфигурации.
 - Wildcard-сертификаты (DNS-01) не поддерживаются.
 
 ## Разработка
@@ -200,19 +203,19 @@ docker run --rm -v guard-data-new:/data -v "$PWD/guard-backups:/backups:ro" \
 make test          # go vet + go test -race
 make build         # bin/guard-sync
 make image         # docker build
-make check         # проверить ./config
+make check         # проверить ./config/guard.yml
 ```
 
 ```text
 cmd/guard-sync/        CLI и точка входа
-internal/config/       загрузка и валидация YAML
+internal/config/       загрузка и валидация guard.yml
 internal/rauthy/       config.toml Rauthy, клиент Admin API, синхронизация клиентов
 internal/caddy/        генерация Caddyfile, admin API, сертификаты
 internal/app/          init, демон синхронизации, пользователи
 internal/backup/       архивы и восстановление
 internal/health/       /health
 docker/rootfs/         сервисы s6-overlay
-config.example/        шаблоны конфигурации
+config.example/        шаблон guard.yml
 examples/              local-demo, react, express
 docs/                  интеграция, эксплуатация, тестирование
 ```

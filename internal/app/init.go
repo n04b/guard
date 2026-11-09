@@ -162,7 +162,7 @@ func LoadChecked(p Paths, st *state.State) (*config.Config, error) {
 	if cfg.TLS.TLS.Mode == config.TLSCustom {
 		for _, f := range []string{cfg.TLS.TLS.Custom.Certificate, cfg.TLS.TLS.Custom.PrivateKey} {
 			if !fileExists(f) {
-				return nil, fmt.Errorf("tls.yml: mode custom, but %s does not exist (mount it into the container)", f)
+				return nil, fmt.Errorf("tls.mode custom, but %s does not exist (mount it into the container)", f)
 			}
 		}
 	}

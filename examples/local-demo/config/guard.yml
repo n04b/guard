@@ -2,6 +2,19 @@
 # Firefox и Edge. Сертификаты выпускает локальный CA Guard.
 server:
   hostname: auth.localhost
+
 admin:
   bootstrap_email: admin@example.com
   allow_from: [0.0.0.0/0, ::/0]     # только для демо!
+
+tls:
+  mode: local-ca
+
+security:
+  groups: [demo]
+
+applications:
+  - name: whoami
+    domain: whoami.localhost
+    upstream: {host: whoami, port: 80}
+    auth: {mode: proxy}

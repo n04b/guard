@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -327,17 +326,13 @@ func (d *Daemon) fallbackActive() bool {
 	return d.cfg != nil && d.cfg.TLS.TLS.ACME.AllowFallback && d.cfg.ResolveTLSMode() == config.TLSACME
 }
 
-// fingerprints hashes the configuration files and, separately, custom
-// certificate files.
+// fingerprints hashes guard.yml and, separately, the custom certificate
+// files.
 func (d *Daemon) fingerprints() (cfgFP, certFP string) {
+	// Only guard.yml counts: editor swap and temp files next to it must not
+	// trigger a reload.
 	h := sha256.New()
-	filepath.WalkDir(d.P.ConfigDir, func(path string, e fs.DirEntry, err error) error {
-		if err != nil || e.IsDir() {
-			return nil
-		}
-		hashFile(h, path)
-		return nil
-	})
+	hashFile(h, config.Path(d.P.ConfigDir))
 	cfgFP = hex.EncodeToString(h.Sum(nil))
 
 	d.mu.Lock()

@@ -1,9 +1,0 @@
-# Режим none: только проксирование и TLS, без авторизации.
-application:
-  name: status
-  domain: status.example.com
-  upstream:
-    host: status
-    port: 8080
-  auth:
-    mode: none

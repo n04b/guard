@@ -16,34 +16,25 @@ import (
 func testConfig(t *testing.T, extraServer string) *config.Config {
 	t.Helper()
 	dir := t.TempDir()
-	files := map[string]string{
-		"server.yml": "server:\n  hostname: auth.example.com\n" + extraServer +
-			"admin:\n  bootstrap_email: a@example.com\n  allow_from: [127.0.0.1/32, 100.64.0.0/10]\n",
-		"applications/wiki.yml": `
-application:
-  name: wiki
-  domain: wiki.example.com
-  upstream: {host: wiki, port: 3000}
-`,
-		"applications/spa.yml": `
-application:
-  name: spa
-  domain: spa.example.com
-  upstream: {host: spa, port: 8443, scheme: https, tls_insecure_skip_verify: true}
-  auth: {mode: app, redirect_uris: [https://spa.example.com/cb]}
-`,
-		"applications/pub.yml": `
-application:
-  name: pub
-  domain: pub.example.com
-  upstream: {host: pub, port: 80}
-  auth: {mode: none}
-`,
-	}
-	for n, c := range files {
-		p := filepath.Join(dir, n)
-		os.MkdirAll(filepath.Dir(p), 0o755)
-		os.WriteFile(p, []byte(c), 0o644)
+	content := "server:\n  hostname: auth.example.com\n" + extraServer + `
+admin:
+  bootstrap_email: a@example.com
+  allow_from: [127.0.0.1/32, 100.64.0.0/10]
+applications:
+  - name: wiki
+    domain: wiki.example.com
+    upstream: {host: wiki, port: 3000}
+  - name: spa
+    domain: spa.example.com
+    upstream: {host: spa, port: 8443, scheme: https, tls_insecure_skip_verify: true}
+    auth: {mode: app, redirect_uris: [https://spa.example.com/cb]}
+  - name: pub
+    domain: pub.example.com
+    upstream: {host: pub, port: 80}
+    auth: {mode: none}
+`
+	if err := os.WriteFile(filepath.Join(dir, config.FileName), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	cfg, err := config.Load(dir)
 	if err != nil {
