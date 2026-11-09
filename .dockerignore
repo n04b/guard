@@ -5,3 +5,5 @@ examples
 docs
 *.md
 !config.example
+.env
+.vscode/

@@ -2,3 +2,6 @@
 /certs/
 /bin/
 *.tar.gz
+.vscode/
+.env
+.env.*
